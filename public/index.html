@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Analizador de Defectos en Paneles Solares</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<header>
+  <h1>🌞 Analizador de Defectos en Paneles Solares</h1>
+  <p>Inferencia automática mediante modelos de Roboflow · TFM UNIR</p>
+</header>
+
+<!-- =========================================================
+     Navegación por pestañas
+     ========================================================= -->
+<nav id="tabs">
+  <button class="tab active" data-tab="analyze">🔍 Analizar</button>
+  <button class="tab" data-tab="configure">⚙️ Configurar</button>
+</nav>
+
+<main>
+
+  <!-- =====================================================
+       PESTAÑA 1 — ANALIZAR
+       ===================================================== -->
+  <div id="panel-analyze" class="panel active">
+    <p class="panel-intro">Diagnostica imágenes con paneles solares.</p>
+
+    <section>
+      <h2>1. Selecciona el modelo</h2>
+      <select id="model-selector">
+        <option value="">— Selecciona un modelo configurado —</option>
+      </select>
+      <div id="model-info" class="model-info"></div>
+
+      <h2 style="margin-top:1.25rem">2. Aporta la imagen</h2>
+      <label>Subir un fichero de imagen</label>
+      <input type="file" id="image-file" accept="image/*" />
+      <p class="or-divider">— o bien (opcional) —</p>
+      <label>Pegar la URL de una imagen pública</label>
+      <input type="text" id="image-url" placeholder="https://..." />
+
+      <h2 style="margin-top:1.25rem">3. Ajustes</h2>
+      <label>Umbral mínimo de confianza</label>
+      <div class="slider-row">
+        <input type="range" id="confidence" min="1" max="99" value="40" />
+        <span id="conf-display">40 %</span>
+      </div>
+
+      <button id="analyze-btn" disabled>Analizar imagen</button>
+    </section>
+
+    <section>
+      <h2>Resultado del análisis</h2>
+      <div id="status"></div>
+      <div id="canvas-container">
+        <canvas id="result-canvas"></canvas>
+      </div>
+      <div id="detections-list"></div>
+    </section>
+  </div>
+
+  <!-- =====================================================
+       PESTAÑA 2 — CONFIGURAR
+       ===================================================== -->
+  <div id="panel-configure" class="panel">
+    <p class="panel-intro">Añade nuevos modelos para consultar.</p>
+
+    <!-- 2.1 Listado de modelos guardados -->
+    <section>
+      <h2>Modelos guardados</h2>
+      <p class="help">Persistencia local del navegador. Usa Exportar/Importar para mover la configuración entre máquinas o compartirla con tu equipo.</p>
+      <ul id="model-list"></ul>
+
+      <div class="row-buttons">
+        <button id="export-btn" class="btn-secondary">⬇ Exportar JSON</button>
+        <label for="import-file" class="btn-like btn-secondary">⬆ Importar JSON</label>
+        <input type="file" id="import-file" accept="application/json,.json" style="display:none" />
+        <button id="reset-btn" class="btn-secondary">↺ Recargar ejemplos</button>
+      </div>
+    </section>
+
+    <!-- 2.2 Formulario (alta y edición) -->
+    <section id="form-section">
+      <h2 id="form-title">Añadir un nuevo modelo</h2>
+
+      <h3>Datos obligatorios</h3>
+      <label>Nombre para mostrar al usuario *</label>
+      <input type="text" id="f-name" placeholder="ej. Defectos RGB - v7" />
+
+      <div class="row">
+        <div>
+          <label>Workspace (informativo) *</label>
+          <input type="text" id="f-workspace" placeholder="ej. solar-panel-iewzf" />
+        </div>
+        <div>
+          <label>Project ID (slug) *</label>
+          <input type="text" id="f-project" placeholder="ej. solar-panel-w3f7s" />
+        </div>
+      </div>
+
+      <label>Versión *</label>
+      <input type="number" id="f-version" placeholder="ej. 7" min="1" />
+
+      <label>Descripciones por clase (JSON) *</label>
+      <p class="help">Ej: <code>{"hotspot": "Punto caliente — posible cortocircuito"}</code>. Las claves deben coincidir con los nombres de clase del modelo.</p>
+      <textarea id="f-descriptions" placeholder='{"clase1": "descripción..."}'></textarea>
+
+      <h3 style="margin-top:1.25rem">Datos opcionales</h3>
+      <p class="help">No afectan a la inferencia. Sirven para documentar el modelo en el TFM y para mostrarse al usuario cuando lo seleccione.</p>
+
+      <div class="row">
+        <div>
+          <label>Tipo de imagen</label>
+          <select id="f-image-type">
+            <option value="">— sin especificar —</option>
+            <option value="RGB">RGB</option>
+            <option value="IR">IR (infrarroja)</option>
+            <option value="Térmica">Térmica</option>
+            <option value="Mixta">Mixta</option>
+          </select>
+        </div>
+        <div>
+          <label>Nº total de imágenes</label>
+          <input type="number" id="f-total-images" placeholder="ej. 1500" min="0" />
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label>División train / valid / test</label>
+          <input type="text" id="f-split" placeholder="ej. 70/20/10" />
+        </div>
+        <div>
+          <label>Tipo de modelo</label>
+          <input type="text" id="f-model-type" placeholder="ej. YOLOv8, YOLOv11, Roboflow 3.0" />
+        </div>
+      </div>
+
+      <h3 style="margin-top:1rem">Métricas del modelo</h3>
+      <div class="row">
+        <div>
+          <label>mAP @50</label>
+          <input type="text" id="f-map50" placeholder="ej. 0.85 o 85%" />
+        </div>
+        <div>
+          <label>Precisión</label>
+          <input type="text" id="f-precision" placeholder="ej. 0.82" />
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>Recall</label>
+          <input type="text" id="f-recall" placeholder="ej. 0.79" />
+        </div>
+        <div>
+          <label>Tamaño de entrada</label>
+          <input type="text" id="f-input-size" placeholder="ej. 640x640" />
+        </div>
+      </div>
+
+      <div class="row-buttons" style="margin-top:1rem">
+        <button id="save-btn">Añadir modelo</button>
+        <button id="cancel-btn" class="btn-secondary" style="display:none">Cancelar edición</button>
+      </div>
+
+      <div id="form-status"></div>
+    </section>
+  </div>
+
+</main>
+
+<footer>
+  <p>Proyecto TFM · Diagnóstico de fallos en paneles fotovoltaicos · UNIR 2026</p>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
