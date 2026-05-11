@@ -30,17 +30,18 @@ Aplicación web con **frontend** (HTML/CSS/JS) y **backend serverless** (Node.js
 ```
 analizar-paneles-solares/
 ├── api/
-│   └── infer.js              ← Función serverless (proxy → Roboflow)
+│   ├── infer.js              ← Función serverless (proxy → Roboflow)
+│   └── health.js             ← Endpoint de diagnóstico
 ├── public/
-│   ├── index.html            ← Estructura HTML con pestañas
-│   ├── styles.css            ← Estilos
-│   ├── app.js                ← Lógica del frontend
-│   └── models.example.json   ← Modelos precargados de ejemplo
-├── package.json              ← Metadatos del proyecto (Node 18+)
-├── vercel.json               ← Configuración de Vercel
-├── .env.local.example        ← Plantilla de variables de entorno
+│   ├── index.html
+│   ├── styles.css
+│   ├── app.js
+│   └── models.example.json
+├── package.json
+├── vercel.json
+├── .env.local.example
 ├── .gitignore
-└── README.md                 ← Este archivo
+└── README.md
 ```
 
 ---
@@ -53,7 +54,10 @@ analizar-paneles-solares/
 
 1. Entra a [github.com](https://github.com) con tu cuenta `pablo-tomas`.
 2. Botón verde **New** → nombre: `analizar-paneles-solares` → **Public** → *Create repository*.
-3. Pulsa **Add file → Upload files** y arrastra **todos los ficheros y carpetas** del proyecto (la carpeta `api/`, la carpeta `public/`, `package.json`, `vercel.json`, `.gitignore`, `.env.local.example`, `README.md`).
+3. Pulsa **Add file → Upload files** y arrastra **el contenido del proyecto** (las carpetas `api/` y `public/`, y los ficheros `package.json`, `vercel.json`, `.gitignore`, `.env.local.example`, `README.md`).
+
+   ⚠️ **Importante**: la carpeta `api/` debe quedar en la **raíz** del repo, no dentro de otra carpeta intermedia. Tras subir los archivos, en la portada del repo deberías ver directamente `api/`, `public/`, `package.json`, etc.
+
 4. Mensaje de commit: `initial commit` → *Commit changes*.
 
 Tu repo público quedará en:
@@ -62,33 +66,67 @@ Tu repo público quedará en:
 ### B) Obtener tu API Key de Roboflow
 
 1. Entra a [roboflow.com](https://roboflow.com), arriba a la derecha → **Settings** → **API Keys**.
-2. Copia la **Private API Key**. La vas a pegar en el siguiente paso.
+2. Copia la **Private API Key**.
 
 ### C) Desplegar en Vercel (gratis, sin tarjeta)
 
-1. Entra a [vercel.com](https://vercel.com) y pulsa **Sign up** → elige **Continue with GitHub** (login con tu cuenta `pablo-tomas`). Acepta los permisos solicitados.
-2. En el dashboard de Vercel, pulsa **Add New… → Project**.
-3. Verás la lista de tus repos de GitHub. Localiza `analizar-paneles-solares` y pulsa **Import**.
-4. En la pantalla de configuración del proyecto:
-   - **Project Name**: déjalo como está (o cambiarlo si quieres).
-   - **Framework Preset**: *Other* (Vercel lo detecta automáticamente).
-   - **Root Directory**: déjalo en `./`.
+1. Entra a [vercel.com](https://vercel.com) y pulsa **Sign up** → **Continue with GitHub**.
+2. Dashboard → **Add New… → Project**.
+3. Localiza `analizar-paneles-solares` y pulsa **Import**.
+4. En la pantalla de configuración:
+   - **Framework Preset**: *Other*
+   - **Root Directory**: `./`
    - Despliega **Environment Variables** y añade:
      - **Key**: `ROBOFLOW_API_KEY`
-     - **Value**: pega tu API Key de Roboflow.
-   - Pulsa **Add**.
-5. Pulsa **Deploy**. En 1-2 minutos verás un mensaje de éxito y un enlace tipo:
-   `https://analizar-paneles-solares.vercel.app`
+     - **Value**: pega tu API Key de Roboflow → *Add*.
+5. Pulsa **Deploy**. Espera 1-2 minutos.
 
-¡Ya está en producción!
+### D) Verificar el despliegue ANTES de probar el analizador
 
-### D) Probar la app
+Antes de pulsar "Analizar", abre estas dos URLs en el navegador (sustituye `tu-url` por la URL que te dio Vercel):
 
-1. Abre la URL pública.
-2. Pestaña **⚙️ Configurar** → verás dos modelos de ejemplo cargados (los de tus URLs originales).
-3. Edita cada uno para rellenar los datos opcionales que vayas obteniendo de Roboflow Universe (mAP, precisión, etc.).
-4. Pulsa **Exportar JSON** para guardar la configuración como `models.json` (te la puedes pasar entre máquinas o compartirla con el equipo).
-5. Pestaña **🔍 Analizar** → selecciona modelo → sube imagen → *Analizar*.
+1. `https://tu-url.vercel.app/api/health`
+   Debe devolver algo como:
+   ```json
+   { "ok": true, "apiKeyConfigured": true, "runtime": "v22.x.x", "timestamp": "..." }
+   ```
+   - Si `apiKeyConfigured` es `false` → no añadiste la variable de entorno (vuelve al paso C.4 y luego redespliega).
+   - Si la página devuelve `404: NOT_FOUND` → la función serverless no se está sirviendo. Mira la sección de diagnóstico más abajo.
+
+2. `https://tu-url.vercel.app/` debe cargar la app.
+
+### E) Probar la app
+
+1. Pestaña **⚙️ Configurar** → verás dos modelos de ejemplo cargados.
+2. Pestaña **🔍 Analizar** → selecciona modelo → sube imagen → *Analizar*.
+
+---
+
+## Diagnóstico cuando aparece el error `Unexpected token 'T'...`
+
+Ese error significa: el navegador esperaba JSON del backend pero recibió la **página 404 de Vercel** ("The page could not be found..."). En esta versión el frontend ya muestra un mensaje más claro que te orienta. Sigue estos pasos en orden:
+
+1. **Comprueba `/api/health`** en tu URL de Vercel.
+   - ¿Da 404? → La función no está desplegada. Pasa al punto 2.
+   - ¿Funciona pero dice `apiKeyConfigured: false`? → Variable de entorno mal puesta. Pasa al punto 4.
+
+2. **Verifica la estructura del repo en GitHub.**
+   Entra a `github.com/pablo-tomas/analizar-paneles-solares`. En la pestaña **Code** debes ver directamente las carpetas `api/` y `public/`. Si están dentro de otra carpeta intermedia (por ejemplo `analizar-paneles-solares/api/`), Vercel no las encontrará.
+
+   Si la estructura está mal: borra el repo, créalo de nuevo y al subir los archivos asegúrate de soltar el **contenido** del ZIP descomprimido, no la carpeta contenedora.
+
+3. **Verifica que Vercel ha desplegado la función.**
+   En Vercel → tu proyecto → pestaña **Deployments** → último deploy → pestaña **Source**. Debes ver `api/infer.js` y `api/health.js`. Si no aparecen, el repo no tiene la estructura correcta.
+
+4. **Variable de entorno.**
+   Vercel → tu proyecto → **Settings → Environment Variables** → comprueba que existe `ROBOFLOW_API_KEY` (escrito exactamente así, en mayúsculas) con tu API Key como valor.
+
+   Tras añadir o cambiar la variable, **debes redesplegar**: pestaña **Deployments** → menú "⋯" del último deploy → **Redeploy**.
+
+5. **Otros errores comunes:**
+   - `Error de Roboflow — 401 / 403`: la API Key es inválida o no tiene acceso al modelo. Usa la *Private API Key*, no la *Publishable*.
+   - `Error de Roboflow — 404`: el `project` o la `version` no coinciden con la URL real del modelo en Roboflow Universe.
+   - Las cajas no se dibujan pero hay detecciones en la lista: CORS al pegar URL externa. Sube el fichero en lugar de pegar URL.
 
 ---
 
@@ -101,8 +139,6 @@ Son dos repositorios y dos URLs independientes:
 | **v1** | `pablo-tomas/analizador-paneles-solares` | GitHub Pages | `https://pablo-tomas.github.io/analizador-paneles-solares/` |
 | **v2** | `pablo-tomas/analizar-paneles-solares` | Vercel | `https://analizar-paneles-solares.vercel.app` |
 
-No interfieren entre sí. Puedes seguir mostrando la v1 en defensas o reuniones donde no quieras depender de Vercel, y usar la v2 cuando quieras la versión con backend.
-
 ---
 
 ## Cómo añadir, editar y borrar modelos
@@ -110,29 +146,19 @@ No interfieren entre sí. Puedes seguir mostrando la v1 en defensas o reuniones 
 Pestaña **Configurar**:
 
 - **Añadir**: rellena el formulario y pulsa *Añadir modelo*.
-- **Editar**: en la lista de arriba pulsa *Editar* en el modelo deseado. El formulario se rellena con sus valores y el botón cambia a *Guardar cambios*. Pulsa *Cancelar edición* si quieres descartar.
-- **Eliminar**: botón *Eliminar* en la fila correspondiente (pide confirmación).
-- **Exportar JSON**: descarga `models.json` con toda la configuración. Puedes versionarlo en Git, compartirlo con Emma y Lucas, o subirlo a Google Drive.
-- **Importar JSON**: pega aquí un `models.json` previamente exportado para sustituir la configuración actual.
-- **Recargar ejemplos**: borra todo y vuelve a cargar los modelos del fichero `models.example.json` del servidor.
+- **Editar**: en la lista pulsa *Editar*. El formulario se rellena con sus valores y el botón cambia a *Guardar cambios*.
+- **Eliminar**: botón *Eliminar* en la fila (pide confirmación).
+- **Exportar JSON**: descarga `models.json`. Puedes versionarlo en Git o compartirlo con el equipo.
+- **Importar JSON**: carga un `models.json` previamente exportado.
+- **Recargar ejemplos**: vuelve a los modelos del fichero `public/models.example.json`.
 
 ### Campos del modelo
 
-**Obligatorios:**
-- Nombre para mostrar al usuario
-- Workspace
-- Project ID (slug)
-- Versión
-- Descripciones por clase (formato JSON)
+**Obligatorios:** Nombre, Workspace, Project ID, Versión, Descripciones por clase (JSON).
 
-**Opcionales (para documentación):**
-- Tipo de imagen (RGB / IR / Térmica / Mixta)
-- Nº total de imágenes
-- División train/valid/test
-- Tipo de modelo (YOLOv8, YOLOv11, Roboflow 3.0…)
-- Métricas: mAP @50, Precisión, Recall, Tamaño de entrada
+**Opcionales:** Tipo de imagen, Nº de imágenes, División train/valid/test, Tipo de modelo, mAP @50, Precisión, Recall, Tamaño de entrada.
 
-Los opcionales aparecen como un panel informativo cuando seleccionas el modelo en la pestaña *Analizar*.
+Los opcionales se muestran como panel informativo cuando seleccionas el modelo en *Analizar*.
 
 ---
 
@@ -147,46 +173,23 @@ Navegador  ──POST /api/infer──►  Función Vercel (servidor)  ──HTT
                                      (variable de entorno, oculta al cliente)
 ```
 
-La API Key nunca sale del backend. El usuario final no la ve, no puede leerla desde DevTools, y no aparece en el código fuente del repositorio.
-
 ### Redimensionado automático de imágenes
 
-Antes de enviar una imagen al backend, el navegador la redimensiona a un máximo de **1600 px** de lado largo y la comprime a JPEG (calidad 90%). Esto evita:
-- Llegar al límite de 8 MB de payload de la función serverless.
-- Pagar ancho de banda innecesario.
-- Que Roboflow rechace la inferencia por imagen demasiado grande.
+Antes de enviar, el navegador redimensiona la imagen a un máximo de **1280 px** de lado largo y la comprime a JPEG (calidad 88%). Así nunca rebasamos el límite de payload del backend.
 
-### Capa gratis de Vercel
+### Capa gratis
 
-Plan Hobby (gratis, sin tarjeta): suficiente para un PoC académico. Los límites relevantes son ~100 GB de ancho de banda mensual y 100 GB-h de ejecución de funciones serverless. Para que llegues a tocar esos límites tendrías que hacer miles de inferencias al día.
-
-### Capa gratis de Roboflow
-
-Roboflow tiene créditos gratis de inferencia hosted por mes. Comprueba el contador en `roboflow.com → Usage`. Para el TFM va sobrado.
+- **Vercel** plan Hobby: ~100 GB de ancho de banda mensual.
+- **Roboflow**: créditos gratis de inferencia hosted por mes. Mira el contador en `roboflow.com → Usage`.
 
 ---
 
 ## Desarrollo local (opcional)
 
-Si quieres probar la app en tu máquina antes de desplegar:
-
 ```bash
-# Una sola vez: instala Vercel CLI
 npm install -g vercel
-
-# En la carpeta del proyecto:
 cp .env.local.example .env.local
 # edita .env.local y pega tu API Key
-
 vercel dev
 # Abre http://localhost:3000
 ```
-
----
-
-## Solución de problemas
-
-- **"El backend no tiene configurada ROBOFLOW_API_KEY"** → Vercel → tu proyecto → *Settings → Environment Variables* → comprueba que la variable existe con ese nombre exacto. Después *Deployments* → *Redeploy* en el último despliegue.
-- **"Error de Roboflow — 401 / 403"** → la API Key es inválida o no tiene acceso al modelo. Asegúrate de usar la *Private* y de que el workspace del modelo es accesible para ti.
-- **"Error de Roboflow — 404"** → el `project` o la `version` no coinciden con la URL real del modelo en Roboflow Universe.
-- **Las cajas no se dibujan pero hay detecciones en la lista** → suele ser CORS si pegaste una URL externa. Sube el fichero en lugar de pegar URL.

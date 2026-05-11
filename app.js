@@ -16,11 +16,12 @@ let editingId = null;  // id del modelo en edición, o null si es alta
 // ---------- Helpers --------------------------------------
 const $ = (id) => document.getElementById(id);
 
-const escapeHtml = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({
+const escapeHtml = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({
   "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
 }[c]));
 
-function showStatus(boxId, msg, type = "info") {
+function showStatus(boxId, msg, type) {
+  if (type == null) type = "info";
   const box = $(boxId);
   box.textContent = msg;
   box.className = "visible status-" + type;
@@ -39,14 +40,13 @@ function colorForClass(cls) {
 // ---------- Almacén de modelos ---------------------------
 function loadModels() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); }
-  catch { return []; }
+  catch (_) { return []; }
 }
 function saveModels(models) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(models));
 }
 
 async function ensureExamplesLoaded() {
-  // Si el usuario no tiene modelos guardados, carga el archivo de ejemplo
   if (loadModels().length > 0) return;
   try {
     const res = await fetch(EXAMPLES_URL);
@@ -126,15 +126,15 @@ function renderModelInfo() {
   if (!m) { info.classList.remove("visible"); info.innerHTML = ""; return; }
 
   const rows = [
-    ["Workspace / Project", `${m.workspace || "?"}/${m.project} · v${m.version}`],
+    ["Workspace / Project", (m.workspace || "?") + "/" + m.project + " · v" + m.version],
     ["Tipo de imagen", m.imageType],
     ["Nº de imágenes", m.totalImages],
     ["División train/valid/test", m.split],
     ["Tipo de modelo", m.modelType],
-    ["mAP @50", m.metrics?.mAP50],
-    ["Precisión", m.metrics?.precision],
-    ["Recall", m.metrics?.recall],
-    ["Tamaño de entrada", m.metrics?.inputSize]
+    ["mAP @50", m.metrics && m.metrics.mAP50],
+    ["Precisión", m.metrics && m.metrics.precision],
+    ["Recall", m.metrics && m.metrics.recall],
+    ["Tamaño de entrada", m.metrics && m.metrics.inputSize]
   ].filter(([_, v]) => v !== undefined && v !== null && v !== "");
 
   if (rows.length === 0) { info.classList.remove("visible"); return; }
@@ -146,11 +146,10 @@ function renderModelInfo() {
 
 // ---------- Formulario: alta y edición -------------------
 function readForm() {
-  // JSON de descripciones
   let descriptions;
   const descRaw = $("f-descriptions").value.trim();
   try { descriptions = JSON.parse(descRaw); }
-  catch { return { error: "El JSON de descripciones no es válido." }; }
+  catch (_) { return { error: "El JSON de descripciones no es válido." }; }
   if (typeof descriptions !== "object" || Array.isArray(descriptions)) {
     return { error: "Las descripciones deben ser un objeto JSON {clase: texto, ...}." };
   }
@@ -162,7 +161,6 @@ function readForm() {
     project:     $("f-project").value.trim(),
     version:     parseInt($("f-version").value, 10),
     descriptions,
-    // opcionales
     imageType:   $("f-image-type").value,
     totalImages: $("f-total-images").value ? parseInt($("f-total-images").value, 10) : null,
     split:       $("f-split").value.trim(),
@@ -174,7 +172,6 @@ function readForm() {
       inputSize: $("f-input-size").value.trim()
     }
   };
-  // Validación de obligatorios
   if (!model.name || !model.workspace || !model.project || !model.version) {
     return { error: "Faltan campos obligatorios: nombre, workspace, project y versión." };
   }
@@ -191,10 +188,10 @@ function fillForm(m) {
   $("f-total-images").value = m.totalImages || "";
   $("f-split").value        = m.split || "";
   $("f-model-type").value   = m.modelType || "";
-  $("f-map50").value        = m.metrics?.mAP50 || "";
-  $("f-precision").value    = m.metrics?.precision || "";
-  $("f-recall").value       = m.metrics?.recall || "";
-  $("f-input-size").value   = m.metrics?.inputSize || "";
+  $("f-map50").value        = (m.metrics && m.metrics.mAP50) || "";
+  $("f-precision").value    = (m.metrics && m.metrics.precision) || "";
+  $("f-recall").value       = (m.metrics && m.metrics.recall) || "";
+  $("f-input-size").value   = (m.metrics && m.metrics.inputSize) || "";
 }
 
 function clearForm() {
@@ -274,7 +271,6 @@ $("import-file").addEventListener("change", (e) => {
       const data = JSON.parse(reader.result);
       const incoming = Array.isArray(data) ? data : data.models;
       if (!Array.isArray(incoming)) throw new Error("El JSON no contiene un array 'models'.");
-      // Asignamos IDs si faltan
       incoming.forEach(m => { if (!m.id) m.id = "m_" + Date.now() + "_" + Math.random().toString(36).slice(2,7); });
       saveModels(incoming);
       renderModelList();
@@ -286,7 +282,7 @@ $("import-file").addEventListener("change", (e) => {
     }
   };
   reader.readAsText(file);
-  e.target.value = "";  // permitir importar el mismo fichero otra vez
+  e.target.value = "";
 });
 
 $("reset-btn").addEventListener("click", async () => {
@@ -315,9 +311,10 @@ function updateAnalyzeState() {
 
 $("analyze-btn").addEventListener("click", runInference);
 
-// Redimensiona la imagen a un máximo lado largo para evitar
-// payloads enormes (límite del proxy y de Roboflow)
-function resizeImage(file, maxSide = 1600) {
+// Redimensiona la imagen a un máximo de lado largo para evitar
+// payloads enormes (límite del proxy y de Roboflow).
+function resizeImage(file, maxSide) {
+  if (maxSide == null) maxSide = 1280;
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
@@ -327,12 +324,38 @@ function resizeImage(file, maxSide = 1600) {
       const c = document.createElement("canvas");
       c.width = w; c.height = h;
       c.getContext("2d").drawImage(img, 0, 0, w, h);
-      const dataUrl = c.toDataURL("image/jpeg", 0.9);
+      const dataUrl = c.toDataURL("image/jpeg", 0.88);
       resolve({ base64: dataUrl.split(",")[1], displayUrl: dataUrl });
     };
     img.onerror = reject;
     img.src = URL.createObjectURL(file);
   });
+}
+
+// Parseo robusto de la respuesta del backend:
+// si no es JSON, mensaje claro al usuario en lugar de "Unexpected token..."
+async function parseBackendResponse(r) {
+  const text = await r.text();
+  const ct = (r.headers.get("content-type") || "").toLowerCase();
+  if (ct.indexOf("application/json") >= 0) {
+    try { return { ok: true, json: JSON.parse(text) }; }
+    catch (e) {
+      return { ok: false, error:
+        `El backend dijo que devolvía JSON pero no se pudo parsear (HTTP ${r.status}).` };
+    }
+  }
+  // Respuesta NO-JSON: típicamente la página 404 de Vercel
+  let hint = "";
+  if (text.indexOf("The page could not be found") >= 0 || r.status === 404) {
+    hint =
+      "Parece que el endpoint /api/infer no existe en este despliegue. Comprueba que:\n" +
+      "  1) La carpeta 'api/' está en la RAÍZ del repo en GitHub (no dentro de otra carpeta).\n" +
+      "  2) Vercel ha completado un deploy DESPUÉS de subir api/infer.js.\n" +
+      "  3) Visita /api/health en tu URL de Vercel: debería devolver JSON con ok:true.";
+  }
+  return { ok: false, error:
+    `Respuesta inesperada (HTTP ${r.status}, content-type: ${ct || "desconocido"}).\n` +
+    hint + "\n\nCuerpo recibido (primeros 200 caracteres):\n" + text.slice(0, 200) };
 }
 
 async function runInference() {
@@ -348,13 +371,13 @@ async function runInference() {
   try {
     let body, displaySrc;
     if ($("image-file").files.length > 0) {
-      const { base64, displayUrl } = await resizeImage($("image-file").files[0]);
-      displaySrc = displayUrl;
+      const out = await resizeImage($("image-file").files[0]);
+      displaySrc = out.displayUrl;
       body = {
         project: model.project,
         version: model.version,
         confidence: conf,
-        image: base64
+        image: out.base64
       };
     } else {
       const url = $("image-url").value.trim();
@@ -373,10 +396,15 @@ async function runInference() {
       body: JSON.stringify(body)
     });
 
-    const result = await r.json();
+    const parsed = await parseBackendResponse(r);
+    if (!parsed.ok) throw new Error(parsed.error);
+    const result = parsed.json;
+
     if (!r.ok) {
-      const detail = typeof result.details === "object" ? JSON.stringify(result.details) : (result.details || "");
-      throw new Error((result.error || "Error") + (detail ? " — " + detail : ""));
+      const detail = (result && typeof result.details === "object")
+        ? JSON.stringify(result.details)
+        : (result && result.details) || "";
+      throw new Error(((result && result.error) || "Error") + (detail ? " — " + detail : ""));
     }
 
     await drawResults(displaySrc, result, model.descriptions || {});
@@ -432,9 +460,10 @@ function drawResults(src, result, descriptions) {
         list.innerHTML = '<p style="color:#718096;font-style:italic;">Sin detecciones por encima del umbral. Prueba a bajar la confianza.</p>';
       } else {
         const grouped = {};
-        preds.forEach(p => { (grouped[p.class] ||= []).push(p.confidence); });
-        for (const [cls, confs] of Object.entries(grouped)) {
-          const max = (Math.max(...confs) * 100).toFixed(1);
+        preds.forEach(p => { (grouped[p.class] || (grouped[p.class] = [])).push(p.confidence); });
+        for (const cls of Object.keys(grouped)) {
+          const confs = grouped[cls];
+          const max = (Math.max.apply(null, confs) * 100).toFixed(1);
           const avg = ((confs.reduce((a, b) => a + b, 0) / confs.length) * 100).toFixed(1);
           const desc = descriptions[cls] || "";
           const color = colorForClass(cls);
