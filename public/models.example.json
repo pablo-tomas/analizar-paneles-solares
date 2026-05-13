@@ -54,7 +54,7 @@
     {
       "id": "m_example_3",
       "name": "fault-detection-dt/1 Roboflow 3.0",
-      "workspace": "fault-detection",
+      "workspace": "solar-panel-fault-detection-gx7fx",
       "project": "fault-detection-dt",
       "version": 1,
       "descriptions": {
