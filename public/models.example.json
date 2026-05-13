@@ -73,6 +73,30 @@
         "recall": "85.4 %",
         "inputSize": "640 x 640"
       }
+    },
+    {
+      "id": "m_example_4",
+      "name": "solar-panel-faulty-dataset-final/4 YOLOv11",
+      "workspace": "6rainstorm-wapqu",
+      "project": "solar-panel-faulty-dataset-final",
+      "version": 4,
+      "descriptions": {
+        "Snow": "Nieve. Programar limpieza.",
+        "Dirty": "Suciedad acumulada sobre el panel. Programar limpieza.",
+        "Physical Damage": "Fisura visible. Riesgo de degradación acelerada.",
+        "Defective": "Algún tipo de defecto. Programar siguiente revisión presencial.",
+        "Non Defective": "Panel sano. Programar siguiente revisión con IA."
+      },
+      "imageType": "RGB",
+      "totalImages": 9180,
+      "split": "Train 90 % / Valid 6 % / Test 3 %",
+      "modelType": "YOLOv11 Object Detection (Fast)",
+      "metrics": {
+        "mAP50": "62.5 %",
+        "precision": "62.8 %",
+        "recall": "63.6 %",
+        "inputSize": "640 x 640"
+      }
     }
   ]
 }
