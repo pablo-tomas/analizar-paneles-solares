@@ -8,7 +8,12 @@
       "project": "solar-panel-w3f7s",
       "version": 7,
       "descriptions": {
-        "solar-panel": "Panel solar detectado en la imagen."
+        "Snow": "Nieve. Programar limpieza.",
+        "Dust": "Suciedad acumulada sobre el panel. Programar limpieza.",
+        "Bird Drop": "Excremento de ave. Programar limpieza.",
+        "Physical Damage": "Fisura visible. Riesgo de degradación acelerada.",
+        "Defective": "Algún tipo de defecto. Programar siguiente revisión presencial.",
+        "Non Defective": "Panel sano. Programar siguiente revisión con IA."
       },
       "imageType": "RGB",
       "totalImages": null,
@@ -28,7 +33,35 @@
       "project": "solar-panel-gydkp",
       "version": 3,
       "descriptions": {
-        "solar-panel": "Panel solar detectado en la imagen."
+        "Snow": "Nieve. Programar limpieza.",
+        "Dust": "Suciedad acumulada sobre el panel. Programar limpieza.",
+        "Bird Drop": "Excremento de ave. Programar limpieza.",
+        "Physical Damage": "Fisura visible. Riesgo de degradación acelerada.",
+        "Defective": "Algún tipo de defecto. Programar siguiente revisión presencial.",
+        "Non Defective": "Panel sano. Programar siguiente revisión con IA."
+      },
+      "imageType": "RGB",
+      "totalImages": null,
+      "split": "",
+      "modelType": "",
+      "metrics": {
+        "mAP50": "",
+        "precision": "",
+        "recall": "",
+        "inputSize": ""
+      }
+    },
+    {
+      "id": "m_example_3",
+      "name": "fault-detection-dt/1 Roboflow 3.0",
+      "workspace": "fault-detection",
+      "project": "fault-detection-dt",
+      "version": 1,
+      "descriptions": {
+        "Dusty": "Suciedad acumulada sobre el panel. Programar limpieza.",
+        "Bird_drop": "Excremento de ave. Programar limpieza.",
+        "Cracked": "Fisura visible. Riesgo de degradación acelerada.",
+        "Panel": "Panel solar."
       },
       "imageType": "RGB",
       "totalImages": null,
