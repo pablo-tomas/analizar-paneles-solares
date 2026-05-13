@@ -1,5 +1,5 @@
 /* =========================================================
-   styles.css — Estilos del analizador
+   styles.css — Estilos del analizador (v3)
    ========================================================= */
 * { box-sizing: border-box; }
 body {
@@ -18,7 +18,7 @@ header, footer {
 header h1 { margin: 0 0 0.25rem; font-size: 1.4rem; }
 header p { margin: 0; opacity: 0.85; font-size: 0.95rem; }
 
-/* ---------- Pestañas ---------- */
+/* ---------- Pestañas principales ---------- */
 #tabs {
   max-width: 960px;
   margin: 1rem auto 0;
@@ -119,6 +119,117 @@ button:disabled { background: #a0aec0; cursor: not-allowed; }
 .or-divider { color: #718096; font-size: 0.85rem; margin: 0.75rem 0 0.25rem; font-style: italic; }
 .help { font-size: 0.8rem; color: #718096; margin: 0.25rem 0 0.5rem; }
 
+/* ---------- Checkboxes de modelos ---------- */
+#model-checkboxes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0.5rem 0;
+}
+.model-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 0.9rem;
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.model-checkbox:hover { background: #edf2f7; }
+.model-checkbox.checked {
+  background: #ebf8ff;
+  border-color: #2c5282;
+}
+.model-checkbox input[type="checkbox"] { width: auto; cursor: pointer; }
+.model-checkbox .color-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.model-checkbox .model-name { font-weight: 600; color: #1e3a5f; }
+.model-checkbox .model-meta { color: #718096; font-size: 0.8rem; }
+.model-checkbox-body { flex: 1; }
+
+.cost-warning {
+  margin-top: 0.6rem;
+  padding: 0.5rem 0.8rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  background: #fefcbf;
+  color: #744210;
+  display: none;
+}
+.cost-warning.visible { display: block; }
+
+/* ---------- Sub-pestañas (modos de visualización) ---------- */
+.sub-tabs {
+  display: flex;
+  gap: 0.3rem;
+  margin: 0.5rem 0 0.75rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+.sub-tab {
+  background: transparent;
+  color: #4a5568;
+  border: none;
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+  margin: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+}
+.sub-tab:hover:not(:disabled) {
+  background: #f7fafc;
+  color: #2c5282;
+}
+.sub-tab.active {
+  color: #2c5282;
+  border-bottom-color: #2c5282;
+  font-weight: 600;
+}
+.view-description {
+  color: #718096;
+  font-size: 0.85rem;
+  font-style: italic;
+  margin: 0 0 0.75rem;
+}
+
+/* ---------- Sub-pestañas por modelo ---------- */
+.per-model-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-bottom: 0.75rem;
+}
+.per-model-tab {
+  background: #f7fafc;
+  color: #4a5568;
+  border: 1px solid #e2e8f0;
+  padding: 0.4rem 0.8rem;
+  font-size: 0.85rem;
+  border-radius: 4px;
+  cursor: pointer;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.per-model-tab .color-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.per-model-tab.active {
+  background: #2c5282;
+  color: #fff;
+  border-color: #2c5282;
+}
+
 /* ---------- Canvas y resultados ---------- */
 #canvas-container {
   margin: 1rem 0;
@@ -148,7 +259,48 @@ button:disabled { background: #a0aec0; cursor: not-allowed; }
   border-radius: 3px;
   font-size: 0.8rem;
 }
+.detection-models {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+.model-pill {
+  font-size: 0.75rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 2px;
+  color: #fff;
+  font-weight: 600;
+  font-family: monospace;
+}
 .detection-desc { color: #4a5568; font-size: 0.88rem; margin-top: 0.3rem; }
+
+/* ---------- Resumen por modelo ---------- */
+#model-summary {
+  margin-top: 1rem;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 0.75rem;
+}
+#model-summary h3 { margin-top: 0; }
+.summary-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.88rem;
+  background: #f7fafc;
+  border-radius: 4px;
+  margin-bottom: 0.3rem;
+}
+.summary-row .color-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.summary-row.error {
+  background: #fed7d7;
+  color: #9b2c2c;
+}
 
 /* ---------- Status box ---------- */
 #status, #form-status {
@@ -164,7 +316,7 @@ button:disabled { background: #a0aec0; cursor: not-allowed; }
 .status-loading { background: #fefcbf; color: #744210; }
 .status-success { background: #c6f6d5; color: #22543d; }
 
-/* ---------- Lista de modelos ---------- */
+/* ---------- Lista de modelos en configuración ---------- */
 #model-list { list-style: none; padding: 0; margin: 0.5rem 0; }
 #model-list li {
   background: #f7fafc;
@@ -179,21 +331,6 @@ button:disabled { background: #a0aec0; cursor: not-allowed; }
 }
 #model-list .model-meta { color: #718096; font-size: 0.8rem; }
 #model-list .row-buttons { margin: 0; }
-
-/* ---------- Info del modelo seleccionado ---------- */
-.model-info {
-  background: #ebf8ff;
-  padding: 0.7rem 0.9rem;
-  border-radius: 4px;
-  margin-top: 0.5rem;
-  font-size: 0.85rem;
-  display: none;
-  border-left: 4px solid #2c5282;
-}
-.model-info.visible { display: block; }
-.model-info dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; column-gap: 0.75rem; row-gap: 0.25rem; }
-.model-info dt { font-weight: 600; color: #2c5282; }
-.model-info dd { margin: 0; color: #2d3748; }
 
 /* ---------- Layout responsive ---------- */
 .row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }

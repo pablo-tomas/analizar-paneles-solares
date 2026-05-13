@@ -10,12 +10,9 @@
 
 <header>
   <h1>🌞 Analizador de Defectos en Paneles Solares</h1>
-  <p>Inferencia automática mediante modelos de Roboflow · TFM UNIR</p>
+  <p>Inferencia multi-modelo mediante Roboflow · TFM UNIR · v3</p>
 </header>
 
-<!-- =========================================================
-     Navegación por pestañas
-     ========================================================= -->
 <nav id="tabs">
   <button class="tab active" data-tab="analyze">🔍 Analizar</button>
   <button class="tab" data-tab="configure">⚙️ Configurar</button>
@@ -27,14 +24,13 @@
        PESTAÑA 1 — ANALIZAR
        ===================================================== -->
   <div id="panel-analyze" class="panel active">
-    <p class="panel-intro">Diagnostica imágenes con paneles solares.</p>
+    <p class="panel-intro">Diagnostica imágenes con paneles solares utilizando uno o varios modelos en paralelo.</p>
 
     <section>
-      <h2>1. Selecciona el modelo</h2>
-      <select id="model-selector">
-        <option value="">— Selecciona un modelo configurado —</option>
-      </select>
-      <div id="model-info" class="model-info"></div>
+      <h2>1. Selecciona los modelos</h2>
+      <p class="help">Marca uno o varios modelos. Cuando selecciones más de uno, las inferencias se ejecutan en paralelo y los resultados se combinan.</p>
+      <div id="model-checkboxes"></div>
+      <div id="cost-warning" class="cost-warning"></div>
 
       <h2 style="margin-top:1.25rem">2. Aporta la imagen</h2>
       <label>Subir un fichero de imagen</label>
@@ -44,22 +40,45 @@
       <input type="text" id="image-url" placeholder="https://..." />
 
       <h2 style="margin-top:1.25rem">3. Ajustes</h2>
+
       <label>Umbral mínimo de confianza</label>
       <div class="slider-row">
         <input type="range" id="confidence" min="1" max="99" value="40" />
         <span id="conf-display">40 %</span>
       </div>
 
+      <label style="margin-top:0.75rem">Umbral de consenso (IoU)</label>
+      <p class="help">Dos detecciones se consideran "la misma" si su solapamiento (IoU) supera este valor. Solo afecta al modo "Consenso".</p>
+      <div class="slider-row">
+        <input type="range" id="iou-threshold" min="10" max="90" value="40" />
+        <span id="iou-display">0.40</span>
+      </div>
+
       <button id="analyze-btn" disabled>Analizar imagen</button>
     </section>
 
-    <section>
+    <section id="results-section" style="display:none">
       <h2>Resultado del análisis</h2>
       <div id="status"></div>
+
+      <!-- Sub-pestañas de modos de visualización -->
+      <nav id="view-tabs" class="sub-tabs">
+        <button class="sub-tab active" data-view="union">Unión</button>
+        <button class="sub-tab" data-view="per-model">Por modelo</button>
+        <button class="sub-tab" data-view="consensus">Consenso</button>
+      </nav>
+
+      <p id="view-description" class="view-description"></p>
+
+      <div id="per-model-tabs" class="per-model-tabs" style="display:none"></div>
+
       <div id="canvas-container">
         <canvas id="result-canvas"></canvas>
       </div>
+
       <div id="detections-list"></div>
+
+      <div id="model-summary"></div>
     </section>
   </div>
 
@@ -69,7 +88,6 @@
   <div id="panel-configure" class="panel">
     <p class="panel-intro">Añade nuevos modelos para consultar.</p>
 
-    <!-- 2.1 Listado de modelos guardados -->
     <section>
       <h2>Modelos guardados</h2>
       <p class="help">Persistencia local del navegador. Usa Exportar/Importar para mover la configuración entre máquinas o compartirla con tu equipo.</p>
@@ -83,7 +101,6 @@
       </div>
     </section>
 
-    <!-- 2.2 Formulario (alta y edición) -->
     <section id="form-section">
       <h2 id="form-title">Añadir un nuevo modelo</h2>
 
@@ -110,7 +127,7 @@
       <textarea id="f-descriptions" placeholder='{"clase1": "descripción..."}'></textarea>
 
       <h3 style="margin-top:1.25rem">Datos opcionales</h3>
-      <p class="help">No afectan a la inferencia. Sirven para documentar el modelo en el TFM y para mostrarse al usuario cuando lo seleccione.</p>
+      <p class="help">No afectan a la inferencia. Sirven para documentar el modelo en el TFM y para mostrarse al usuario.</p>
 
       <div class="row">
         <div>
