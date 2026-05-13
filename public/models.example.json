@@ -3,10 +3,10 @@
   "models": [
     {
       "id": "m_example_1",
-      "name": "solar-panel-w3f7s/7 YOLOv11",
+      "name": "solar-panel-w3f7s/4 YOLOv11",
       "workspace": "solar-panel-iewzf",
       "project": "solar-panel-w3f7s",
-      "version": 7,
+      "version": 4,
       "descriptions": {
         "Snow": "Nieve. Programar limpieza.",
         "Dust": "Suciedad acumulada sobre el panel. Programar limpieza.",
@@ -16,14 +16,14 @@
         "Non Defective": "Panel sano. Programar siguiente revisión con IA."
       },
       "imageType": "RGB",
-      "totalImages": null,
-      "split": "",
-      "modelType": "",
+      "totalImages": 8982,
+      "split": "Train 92 % / Valid 5 % / Test 3 %",
+      "modelType": "YOLOv11 Object Detection (Accurate)",
       "metrics": {
-        "mAP50": "",
-        "precision": "",
-        "recall": "",
-        "inputSize": ""
+        "mAP50": "85.1 %",
+        "precision": "87.3 %",
+        "recall": "81.9 %",
+        "inputSize": "640 x 640"
       }
     },
     {
@@ -41,14 +41,14 @@
         "Non Defective": "Panel sano. Programar siguiente revisión con IA."
       },
       "imageType": "RGB",
-      "totalImages": null,
-      "split": "",
-      "modelType": "",
+      "totalImages": 9180,
+      "split": "Train 90 % / Valid 6 % / Test 4 %",
+      "modelType": "Roboflow 3.0 Object Detection (Fast)",
       "metrics": {
-        "mAP50": "",
-        "precision": "",
-        "recall": "",
-        "inputSize": ""
+        "mAP50": "78.6 %",
+        "precision": "80.7 %",
+        "recall": "76.5 %",
+        "inputSize": "640 x 640"
       }
     },
     {
@@ -64,14 +64,14 @@
         "Panel": "Panel solar."
       },
       "imageType": "RGB",
-      "totalImages": null,
-      "split": "",
-      "modelType": "",
+      "totalImages": 2171,
+      "split": "Train 90 % / Valid 7 % / Test 3 %",
+      "modelType": "Roboflow 3.0 Object Detection (Fast)",
       "metrics": {
-        "mAP50": "",
-        "precision": "",
-        "recall": "",
-        "inputSize": ""
+        "mAP50": "88.5 %",
+        "precision": "84.1 %",
+        "recall": "85.4 %",
+        "inputSize": "640 x 640"
       }
     }
   ]
