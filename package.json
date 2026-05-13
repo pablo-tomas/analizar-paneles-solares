@@ -1,7 +1,7 @@
 {
   "name": "analizar-paneles-solares",
-  "version": "2.0.0",
-  "description": "Analizador web de defectos en paneles solares con backend proxy (TFM UNIR)",
+  "version": "3.0.0",
+  "description": "Analizador web de defectos en paneles solares con backend proxy y multi-modelo (TFM UNIR)",
   "private": true,
   "engines": {
     "node": ">=18"

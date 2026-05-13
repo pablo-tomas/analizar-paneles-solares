@@ -1,27 +1,47 @@
-# Analizar Paneles Solares — v2
+# Analizar Paneles Solares — v3
 
 Aplicación web con **frontend** (HTML/CSS/JS) y **backend serverless** (Node.js) que:
 
-1. Recibe una imagen de paneles solares y la envía a un modelo de **Roboflow** para detección de defectos.
+1. Recibe una imagen de paneles solares y la envía **en paralelo a varios modelos** de Roboflow para detección de defectos.
 2. Muestra los recuadros etiquetados sobre la imagen y la lista de detecciones con porcentaje de confianza.
-3. Permite **gestionar varios modelos** (alta, edición, borrado) desde un panel de configuración con persistencia en `localStorage` + export/import a `models.json`.
-4. **Oculta la API Key** de Roboflow en una variable de entorno del servidor (no viaja al navegador).
+3. Permite **gestionar varios modelos** (alta, edición, borrado) con persistencia en `localStorage` + export/import a `models.json`.
+4. **Oculta la API Key** de Roboflow en una variable de entorno del servidor.
 
 > **Proyecto TFM — Diagnóstico de fallos en paneles fotovoltaicos · UNIR 2026**
 
 ---
 
-## Cambios respecto a la v1
+## Novedades de la v3 (Sprint 1 del roadmap)
 
-| Aspecto | v1 | v2 |
+| Aspecto | v2 | v3 |
 |---|---|---|
-| API Key | Guardada en `localStorage` del navegador (visible) | Variable de entorno del backend (oculta) |
-| Arquitectura | Página estática pura (HTML único) | Frontend estático + función serverless |
-| Hosting | GitHub Pages | Vercel (gratis, conectado a GitHub) |
-| Navegación | Una sola vista | Pestañas: *Analizar* / *Configurar* |
-| Persistencia modelos | localStorage | localStorage + export/import a `models.json` |
-| Edición de modelos | No (solo eliminar) | Sí (editar + eliminar) |
-| Campos del modelo | 4 obligatorios | 4 obligatorios + 8 opcionales |
+| Selección de modelos | Uno (selector `<select>`) | **Múltiple (casillas)** |
+| Inferencia | Una llamada | **N llamadas en paralelo** (`Promise.allSettled`) |
+| Tolerancia a fallos | Un fallo aborta todo | **Un modelo caído no rompe los demás** |
+| Visualización del resultado | Vista única | **Tres modos: Unión / Por modelo / Consenso** |
+| Identificación visual | — | **Color por modelo + iniciales en cada caja** |
+| Consenso entre modelos | — | **Cálculo IoU con umbral configurable** |
+| Aviso de coste | — | **Advierte al seleccionar varios modelos** |
+| Resumen por modelo | — | **Estado, nº detecciones, errores específicos** |
+
+---
+
+## Los tres modos de visualización
+
+Tras analizar una imagen, aparecen tres sub-pestañas:
+
+### Unión (por defecto)
+Todas las detecciones de todos los modelos, dibujadas con el color de cada modelo. Cada caja lleva en su esquina las iniciales del modelo que la generó. La lista agrupa por **clase normalizada** (lowercase + trim) y muestra qué modelos detectaron cada clase mediante "pills" de colores.
+
+### Por modelo
+Sub-pestañas, una por modelo. Permite ver solo las detecciones de un modelo concreto, útil para depurar o comparar visualmente.
+
+### Consenso
+Las detecciones se agrupan por **solapamiento (IoU ≥ umbral configurable)** y **misma clase**. Cada grupo se muestra como una sola caja:
+- Si **varios modelos** detectaron lo mismo en la misma zona → caja en color oscuro con etiqueta "N× modelos coinciden". **Alta confianza.**
+- Si **solo un modelo** detectó algo → caja en color gris, etiqueta "solo 1 modelo". **Confianza menor.**
+
+**Nota sobre la reconciliación de clases**: la normalización es deliberadamente conservadora (solo lowercase + trim). No fuerza que `"Dust"` y `"Soiling"` sean equivalentes aunque semánticamente lo sean. Esa reconciliación profunda es trabajo del LLM (Sprint 3).
 
 ---
 
@@ -30,12 +50,12 @@ Aplicación web con **frontend** (HTML/CSS/JS) y **backend serverless** (Node.js
 ```
 analizar-paneles-solares/
 ├── api/
-│   ├── infer.js              ← Función serverless (proxy → Roboflow)
-│   └── health.js             ← Endpoint de diagnóstico
+│   ├── infer.js              ← Función serverless (proxy → Roboflow) - SIN CAMBIOS
+│   └── health.js             ← Endpoint de diagnóstico - SIN CAMBIOS
 ├── public/
-│   ├── index.html
-│   ├── styles.css
-│   ├── app.js
+│   ├── index.html            ← Multi-selección, modos de visualización, slider IoU
+│   ├── styles.css            ← Estilos nuevos: checkboxes, sub-pestañas, pills
+│   ├── app.js                ← Orquestación paralela, cálculo IoU, modos
 │   └── models.example.json
 ├── package.json
 ├── vercel.json
@@ -44,152 +64,74 @@ analizar-paneles-solares/
 └── README.md
 ```
 
----
-
-## Despliegue paso a paso en tu cuenta (`pablo-tomas`)
-
-> Como pediste mantener disponibles **las dos versiones** (v1 y v2), las trataremos como repositorios separados. La v1 sigue funcionando tal cual, en GitHub Pages.
-
-### A) Crear el repositorio de la v2
-
-1. Entra a [github.com](https://github.com) con tu cuenta `pablo-tomas`.
-2. Botón verde **New** → nombre: `analizar-paneles-solares` → **Public** → *Create repository*.
-3. Pulsa **Add file → Upload files** y arrastra **el contenido del proyecto** (las carpetas `api/` y `public/`, y los ficheros `package.json`, `vercel.json`, `.gitignore`, `.env.local.example`, `README.md`).
-
-   ⚠️ **Importante**: la carpeta `api/` debe quedar en la **raíz** del repo, no dentro de otra carpeta intermedia. Tras subir los archivos, en la portada del repo deberías ver directamente `api/`, `public/`, `package.json`, etc.
-
-4. Mensaje de commit: `initial commit` → *Commit changes*.
-
-Tu repo público quedará en:
-`https://github.com/pablo-tomas/analizar-paneles-solares`
-
-### B) Obtener tu API Key de Roboflow
-
-1. Entra a [roboflow.com](https://roboflow.com), arriba a la derecha → **Settings** → **API Keys**.
-2. Copia la **Private API Key**.
-
-### C) Desplegar en Vercel (gratis, sin tarjeta)
-
-1. Entra a [vercel.com](https://vercel.com) y pulsa **Sign up** → **Continue with GitHub**.
-2. Dashboard → **Add New… → Project**.
-3. Localiza `analizar-paneles-solares` y pulsa **Import**.
-4. En la pantalla de configuración:
-   - **Framework Preset**: *Other*
-   - **Root Directory**: `./`
-   - Despliega **Environment Variables** y añade:
-     - **Key**: `ROBOFLOW_API_KEY`
-     - **Value**: pega tu API Key de Roboflow → *Add*.
-5. Pulsa **Deploy**. Espera 1-2 minutos.
-
-### D) Verificar el despliegue ANTES de probar el analizador
-
-Antes de pulsar "Analizar", abre estas dos URLs en el navegador (sustituye `tu-url` por la URL que te dio Vercel):
-
-1. `https://tu-url.vercel.app/api/health`
-   Debe devolver algo como:
-   ```json
-   { "ok": true, "apiKeyConfigured": true, "runtime": "v22.x.x", "timestamp": "..." }
-   ```
-   - Si `apiKeyConfigured` es `false` → no añadiste la variable de entorno (vuelve al paso C.4 y luego redespliega).
-   - Si la página devuelve `404: NOT_FOUND` → la función serverless no se está sirviendo. Mira la sección de diagnóstico más abajo.
-
-2. `https://tu-url.vercel.app/` debe cargar la app.
-
-### E) Probar la app
-
-1. Pestaña **⚙️ Configurar** → verás dos modelos de ejemplo cargados.
-2. Pestaña **🔍 Analizar** → selecciona modelo → sube imagen → *Analizar*.
+El backend **no ha cambiado** respecto a v2. Toda la lógica de orquestación vive en el navegador.
 
 ---
 
-## Diagnóstico cuando aparece el error `Unexpected token 'T'...`
+## Despliegue
 
-Ese error significa: el navegador esperaba JSON del backend pero recibió la **página 404 de Vercel** ("The page could not be found..."). En esta versión el frontend ya muestra un mensaje más claro que te orienta. Sigue estos pasos en orden:
+Si vienes de la v2, basta con **reemplazar los archivos del frontend** (`public/index.html`, `public/styles.css`, `public/app.js`) y el `package.json`. La variable de entorno `ROBOFLOW_API_KEY` ya configurada en Vercel sigue siendo válida.
 
-1. **Comprueba `/api/health`** en tu URL de Vercel.
-   - ¿Da 404? → La función no está desplegada. Pasa al punto 2.
-   - ¿Funciona pero dice `apiKeyConfigured: false`? → Variable de entorno mal puesta. Pasa al punto 4.
+Vercel detectará el push y redesplegará en 1-2 minutos.
 
-2. **Verifica la estructura del repo en GitHub.**
-   Entra a `github.com/pablo-tomas/analizar-paneles-solares`. En la pestaña **Code** debes ver directamente las carpetas `api/` y `public/`. Si están dentro de otra carpeta intermedia (por ejemplo `analizar-paneles-solares/api/`), Vercel no las encontrará.
-
-   Si la estructura está mal: borra el repo, créalo de nuevo y al subir los archivos asegúrate de soltar el **contenido** del ZIP descomprimido, no la carpeta contenedora.
-
-3. **Verifica que Vercel ha desplegado la función.**
-   En Vercel → tu proyecto → pestaña **Deployments** → último deploy → pestaña **Source**. Debes ver `api/infer.js` y `api/health.js`. Si no aparecen, el repo no tiene la estructura correcta.
-
-4. **Variable de entorno.**
-   Vercel → tu proyecto → **Settings → Environment Variables** → comprueba que existe `ROBOFLOW_API_KEY` (escrito exactamente así, en mayúsculas) con tu API Key como valor.
-
-   Tras añadir o cambiar la variable, **debes redesplegar**: pestaña **Deployments** → menú "⋯" del último deploy → **Redeploy**.
-
-5. **Otros errores comunes:**
-   - `Error de Roboflow — 401 / 403`: la API Key es inválida o no tiene acceso al modelo. Usa la *Private API Key*, no la *Publishable*.
-   - `Error de Roboflow — 404`: el `project` o la `version` no coinciden con la URL real del modelo en Roboflow Universe.
-   - Las cajas no se dibujan pero hay detecciones en la lista: CORS al pegar URL externa. Sube el fichero en lugar de pegar URL.
+Para un despliegue desde cero, sigue las instrucciones de la v2 (subir a un repo nuevo de GitHub, conectar con Vercel, añadir la variable de entorno `ROBOFLOW_API_KEY`).
 
 ---
 
-## ¿Cómo conviven la v1 y la v2?
+## Compatibilidad con la v2
 
-Son dos repositorios y dos URLs independientes:
-
-| Versión | Repo | Hosting | URL pública |
-|---|---|---|---|
-| **v1** | `pablo-tomas/analizador-paneles-solares` | GitHub Pages | `https://pablo-tomas.github.io/analizador-paneles-solares/` |
-| **v2** | `pablo-tomas/analizar-paneles-solares` | Vercel | `https://analizar-paneles-solares.vercel.app` |
+- **Misma clave de localStorage** (`rf_models_v2`) → los modelos guardados en la v2 funcionan sin migración.
+- **Mismo formato `models.json`** → los archivos exportados con la v2 se pueden importar en la v3 directamente.
+- **Mismo endpoint `/api/infer`** → si tienes el repo de la v2 ya desplegado, no toca tocar nada del backend.
 
 ---
 
-## Cómo añadir, editar y borrar modelos
+## Cómo se usa el modo multi-modelo
 
-Pestaña **Configurar**:
-
-- **Añadir**: rellena el formulario y pulsa *Añadir modelo*.
-- **Editar**: en la lista pulsa *Editar*. El formulario se rellena con sus valores y el botón cambia a *Guardar cambios*.
-- **Eliminar**: botón *Eliminar* en la fila (pide confirmación).
-- **Exportar JSON**: descarga `models.json`. Puedes versionarlo en Git o compartirlo con el equipo.
-- **Importar JSON**: carga un `models.json` previamente exportado.
-- **Recargar ejemplos**: vuelve a los modelos del fichero `public/models.example.json`.
-
-### Campos del modelo
-
-**Obligatorios:** Nombre, Workspace, Project ID, Versión, Descripciones por clase (JSON).
-
-**Opcionales:** Tipo de imagen, Nº de imágenes, División train/valid/test, Tipo de modelo, mAP @50, Precisión, Recall, Tamaño de entrada.
-
-Los opcionales se muestran como panel informativo cuando seleccionas el modelo en *Analizar*.
+1. En la pestaña **🔍 Analizar**, marca con casillas los modelos que quieras usar (uno o varios).
+2. Si seleccionas más de uno, aparece un aviso amarillo recordando que cada inferencia consume créditos de Roboflow.
+3. Sube la imagen y pulsa **Analizar imagen**.
+4. Cuando termine (típicamente 2-5 segundos), navega entre las tres sub-pestañas:
+   - **Unión**: visión global.
+   - **Por modelo**: enfoque uno a uno.
+   - **Consenso**: prueba diferentes umbrales de IoU con el slider para ver cómo cambia el agrupamiento.
+5. En la parte inferior, el **Resumen por modelo** muestra el estado de cada inferencia (verde si OK, rojo si falló, con el motivo).
 
 ---
 
-## Detalles técnicos
+## Decisiones técnicas relevantes
 
-### Cómo viaja la API Key
+### Orquestación desde el cliente
+Las N llamadas a `/api/infer` se hacen desde el navegador con `Promise.allSettled`. Ventajas:
+- El backend serverless no necesita cambios.
+- No hay timeout acumulado (cada llamada independiente).
+- Si un modelo falla, los demás siguen mostrando resultados.
 
-```
-Navegador  ──POST /api/infer──►  Función Vercel (servidor)  ──HTTPS──►  detect.roboflow.com
-                                 │
-                                 └── lee process.env.ROBOFLOW_API_KEY
-                                     (variable de entorno, oculta al cliente)
-```
+### Colores asignados por posición
+Los colores se asignan en el orden en que aparecen los modelos en `models.json` (índice 0 → azul, índice 1 → naranja…). No están en el JSON para no añadir campos al formulario de configuración. Si reordenas los modelos, los colores cambian, pero la identificación visual sigue funcionando.
 
-### Redimensionado automático de imágenes
+### Algoritmo de consenso
+Se usa **single-link clustering**: una detección se añade al grupo si solapa lo suficiente (IoU ≥ umbral) con **cualquier** miembro del grupo, no necesariamente con todos. Es el comportamiento más natural cuando varios modelos producen cajas ligeramente diferentes para el mismo defecto.
 
-Antes de enviar, el navegador redimensiona la imagen a un máximo de **1280 px** de lado largo y la comprime a JPEG (calidad 88%). Así nunca rebasamos el límite de payload del backend.
-
-### Capa gratis
-
-- **Vercel** plan Hobby: ~100 GB de ancho de banda mensual.
-- **Roboflow**: créditos gratis de inferencia hosted por mes. Mira el contador en `roboflow.com → Usage`.
+### Caja consensuada
+Cuando se fusionan N detecciones en una sola caja, las coordenadas se calculan como **media ponderada por confianza**. Da más peso a los modelos más seguros.
 
 ---
 
-## Desarrollo local (opcional)
+## Próximos pasos del roadmap
 
-```bash
-npm install -g vercel
-cp .env.local.example .env.local
-# edita .env.local y pega tu API Key
-vercel dev
-# Abre http://localhost:3000
-```
+Esta v3 completa el **Sprint 1**. Los siguientes sprints planeados:
+
+- **Sprint 2**: histórico de inferencias (Supabase).
+- **Sprint 3**: integración con LLM para diagnósticos en lenguaje natural.
+- **Sprint 4**: análisis por lotes (10-20 imágenes de una instalación).
+- **Sprint 5**: evaluación cuantitativa contra ground truth.
+
+---
+
+## Solución de problemas
+
+- **"El backend no tiene configurada ROBOFLOW_API_KEY"** → Vercel → tu proyecto → *Settings → Environment Variables* → verifica que la variable existe. Después *Deployments → Redeploy* en el último despliegue.
+- **Algunos modelos fallan con 401/403** → la API Key no tiene acceso a esos modelos en concreto. Comprueba que pertenecen a tu workspace o son públicos.
+- **El análisis tarda mucho con varios modelos** → es esperado: la duración total es la del modelo más lento, no la suma. Roboflow Hosted suele responder en 1-3 segundos por modelo.
+- **El modo Consenso no muestra agrupaciones esperadas** → baja el umbral de IoU (slider) o comprueba si los modelos están devolviendo nombres de clase distintos (puedes verlo en la vista "Por modelo"). En el caso de nombres distintos, el reconciliador semántico llegará con el LLM del Sprint 3.
