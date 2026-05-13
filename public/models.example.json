@@ -3,7 +3,7 @@
   "models": [
     {
       "id": "m_example_1",
-      "name": "Solar panel CV Model — Ejemplo 1 (v7)",
+      "name": "solar-panel-w3f7s/7 YOLOv11",
       "workspace": "solar-panel-iewzf",
       "project": "solar-panel-w3f7s",
       "version": 7,
@@ -23,7 +23,7 @@
     },
     {
       "id": "m_example_2",
-      "name": "Solar panel CV Model — Ejemplo 2 (v3)",
+      "name": "solar-panel-gydkp/3 Roboflow 3.0",
       "workspace": "solar-panel-q3vlt",
       "project": "solar-panel-gydkp",
       "version": 3,
