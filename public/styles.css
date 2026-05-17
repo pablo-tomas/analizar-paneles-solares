@@ -341,3 +341,53 @@ button:disabled { background: #a0aec0; cursor: not-allowed; }
 .slider-row span { font-family: monospace; min-width: 3em; text-align: right; }
 
 footer { font-size: 0.85rem; padding: 1rem; opacity: 0.9; }
+
+/* ---------- Taxonomía y diccionario de sinónimos ---------- */
+#taxonomy-list { list-style: none; padding: 0; margin: 0.5rem 0; }
+#taxonomy-list li {
+  background: #f7fafc;
+  padding: 0.5rem 0.8rem;
+  margin: 0.3rem 0;
+  border-radius: 4px;
+  font-size: 0.88rem;
+  border-left: 3px solid #2c5282;
+}
+#taxonomy-list .tax-class { font-weight: 600; color: #1e3a5f; }
+#taxonomy-list .tax-syns { color: #718096; font-size: 0.82rem; font-family: monospace; }
+#taxonomy-list .tax-desc { color: #4a5568; font-size: 0.82rem; font-style: italic; }
+#taxonomy-json { min-height: 200px; }
+
+/* ---------- Detecciones sin homologar ---------- */
+.detection.unmapped { border-left-color: #d69e2e; background: #fffbeb; }
+.badge-unmapped {
+  font-family: monospace;
+  background: #d69e2e;
+  color: #fff;
+  padding: 0.15rem 0.5rem;
+  border-radius: 3px;
+  font-size: 0.8rem;
+}
+.detection-original {
+  color: #718096;
+  font-size: 0.8rem;
+  font-style: italic;
+  margin-left: 0.3rem;
+}
+
+/* ---------- Leyenda de homologación ---------- */
+.homolog-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 0.5rem 0 0.75rem;
+  padding: 0.5rem 0.8rem;
+  background: #f7fafc;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  color: #4a5568;
+}
+.homolog-legend .legend-item { display: flex; align-items: center; gap: 0.35rem; }
+.homolog-legend .legend-swatch {
+  width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0;
+  border: 1px solid #cbd5e0;
+}

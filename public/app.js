@@ -13,7 +13,13 @@
 // ---------- Constantes y estado --------------------------
 const STORAGE_KEY = "rf_models_v2";   // mismo key que v2: compatibilidad
 const EXAMPLES_URL = "models.example.json";
+const TAXONOMY_KEY = "rf_taxonomy_v3"; // clave de localStorage del diccionario
+const TAXONOMY_URL = "taxonomy.example.json";
 const IOU_DEFAULT = 0.40;
+
+// Etiqueta usada cuando una clase de un modelo no figura en el diccionario.
+const UNMAPPED_LABEL = "Sin homologar";
+const UNMAPPED_COLOR = "#d69e2e";
 
 // Paleta para asignar colores a los modelos en cada inferencia.
 // 8 colores bien diferenciados; si hay más modelos, se ciclan.
@@ -80,6 +86,102 @@ async function ensureExamplesLoaded() {
     if (Array.isArray(data.models)) saveModels(data.models);
   } catch (_) { /* sin ejemplos, seguimos */ }
 }
+
+// =========================================================
+// MÓDULO DE HOMOLOGACIÓN DE CLASES (estandarización)
+//
+// Homologa la clase devuelta por cualquier modelo a una de las
+// 6 clases de la taxonomía estándar, usando el Diccionario de
+// Clases Sinónimas. La comparación es insensible a mayúsculas,
+// espacios y guiones (bajos o medios).
+// =========================================================
+
+// Normalización FUERTE para homologar: minúsculas, y unifica
+// cualquier secuencia de espacios/guiones/guiones_bajos en un
+// único espacio. Así "Physical_Damage", "physical-damage" y
+// "PHYSICAL  DAMAGE" colapsan en la misma clave "physical damage".
+function normalizeForHomolog(cls) {
+  return String(cls || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_\-]+/g, " ");
+}
+
+// Carga el diccionario de sinónimos desde localStorage.
+// Devuelve { taxonomy: {clase: descripción}, synonyms: {clase: [sinónimos]} }.
+function loadTaxonomy() {
+  try {
+    const raw = localStorage.getItem(TAXONOMY_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (data && data.synonyms) return data;
+    return null;
+  } catch (_) { return null; }
+}
+
+function saveTaxonomy(data) {
+  localStorage.setItem(TAXONOMY_KEY, JSON.stringify(data));
+  // Invalida la caché del índice de homologación
+  _homologIndex = null;
+}
+
+// Carga el diccionario por defecto si no hay ninguno guardado.
+async function ensureTaxonomyLoaded() {
+  if (loadTaxonomy()) return;
+  try {
+    const res = await fetch(TAXONOMY_URL);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data && data.synonyms) saveTaxonomy(data);
+  } catch (_) { /* sin diccionario por defecto, seguimos */ }
+}
+
+// Índice invertido cacheado: normalizado(sinónimo) -> claseEstándar.
+// Se reconstruye cuando cambia el diccionario.
+let _homologIndex = null;
+
+function getHomologIndex() {
+  if (_homologIndex) return _homologIndex;
+  const tax = loadTaxonomy();
+  const index = {};
+  if (tax && tax.synonyms) {
+    Object.keys(tax.synonyms).forEach(standardClass => {
+      const syns = tax.synonyms[standardClass] || [];
+      syns.forEach(syn => {
+        index[normalizeForHomolog(syn)] = standardClass;
+      });
+      // La propia clase estándar siempre se homologa a sí misma
+      index[normalizeForHomolog(standardClass)] = standardClass;
+    });
+  }
+  _homologIndex = index;
+  return index;
+}
+
+// Homologa una clase concreta. Devuelve un objeto:
+//   { original, standard, mapped }
+// - original: el nombre tal cual lo devolvió el modelo
+// - standard: la clase estándar homologada, o el original si no se pudo
+// - mapped:   true si se homologó, false si la clase no está en el diccionario
+function homologateClass(originalClass) {
+  const index = getHomologIndex();
+  const key = normalizeForHomolog(originalClass);
+  const standard = index[key];
+  if (standard) {
+    return { original: originalClass, standard: standard, mapped: true };
+  }
+  return { original: originalClass, standard: originalClass, mapped: false };
+}
+
+// Descripción de una clase estándar según la taxonomía (si existe).
+function taxonomyDescription(standardClass) {
+  const tax = loadTaxonomy();
+  if (tax && tax.taxonomy && tax.taxonomy[standardClass]) {
+    return tax.taxonomy[standardClass];
+  }
+  return "";
+}
+
 
 // ---------- Pestañas principales -------------------------
 document.querySelectorAll("#tabs .tab").forEach(btn => {
@@ -486,13 +588,22 @@ async function runInference() {
       const result = settled[i];
       const color = getColorForModel(m.id);
       if (result.status === "fulfilled") {
-        const preds = (result.value.predictions || []).map(p => ({
-          ...p,
-          _modelId: m.id,
-          _modelName: m.name,
-          _color: color,
-          _classNorm: normalizeClass(p.class)
-        }));
+        const preds = (result.value.predictions || []).map(p => {
+          // Homologar la clase del modelo a la taxonomía estándar
+          const hom = homologateClass(p.class);
+          return {
+            ...p,
+            _modelId: m.id,
+            _modelName: m.name,
+            _color: color,
+            // _classNorm ahora se basa en la clase HOMOLOGADA: así el
+            // consenso agrupa "Dust" y "Dirty" como la misma clase.
+            _classOriginal: p.class,
+            _classStandard: hom.standard,
+            _classMapped: hom.mapped,
+            _classNorm: normalizeClass(hom.standard)
+          };
+        });
         return {
           model: m,
           color,
@@ -562,9 +673,10 @@ function iou(a, b) {
   return inter / union;
 }
 
-// Agrupa detecciones que solapan (IoU ≥ threshold) Y comparten clase normalizada.
-// Cada grupo representa una "detección consensuada" — uno o varios modelos
-// detectaron lo mismo en la misma zona.
+// Agrupa detecciones que solapan (IoU ≥ threshold) Y comparten clase
+// HOMOLOGADA (_classNorm se basa en la clase estándar de la taxonomía).
+// Así dos detecciones con clases originales distintas pero sinónimas
+// (p. ej. "Dust" y "Dirty") se consolidan en un mismo grupo de consenso.
 function buildConsensusGroups(allPreds, iouThreshold) {
   const groups = [];
   const used = new Array(allPreds.length).fill(false);
@@ -603,19 +715,28 @@ function summarizeGroup(group) {
     sumW += w; sx += p.x * w; sy += p.y * w;
     sw += p.width * w; sh += p.height * w;
   });
+  // La clase del grupo es la clase ESTÁNDAR homologada (es la misma para
+  // todos los miembros, porque el clustering agrupa por _classNorm).
+  // El grupo está "homologado" si todos sus miembros lo están.
+  const allMapped = group.every(p => p._classMapped);
   const merged = {
     x: sx / sumW, y: sy / sumW,
     width: sw / sumW, height: sh / sumW,
-    class: group[0].class,
+    class: group[0]._classStandard,
     _classNorm: group[0]._classNorm
   };
   const confs = group.map(p => p.confidence);
   const modelIds = Array.from(new Set(group.map(p => p._modelId)));
+  // Conjunto de etiquetas originales distintas que se han consolidado
+  // (p. ej. ["Dust", "Dirty"]) — útil para trazabilidad.
+  const originalLabels = Array.from(new Set(group.map(p => p._classOriginal)));
   return {
     box: merged,
     members: group,
     nModels: modelIds.length,
     modelIds,
+    mapped: allMapped,
+    originalLabels: originalLabels,
     confMax: Math.max.apply(null, confs),
     confAvg: confs.reduce((a, b) => a + b, 0) / confs.length
   };
@@ -647,9 +768,12 @@ function renderUnion() {
   drawImage();
   drawBoxes(all.map(p => ({
     box: p,
-    color: p._color,
-    label: `${p.class} ${(p.confidence * 100).toFixed(0)}%`,
-    sublabel: modelInitials(p._modelName)
+    // Las detecciones sin homologar se dibujan con el color de aviso
+    color: p._classMapped ? p._color : UNMAPPED_COLOR,
+    // Etiqueta del bounding-box: clase HOMOLOGADA (taxonomía estándar)
+    label: `${p._classStandard} ${(p.confidence * 100).toFixed(0)}%`,
+    sublabel: modelInitials(p._modelName),
+    dashed: !p._classMapped
   })));
   renderDetectionListUnion(all);
 }
@@ -686,9 +810,10 @@ function renderPerModel() {
   }
   drawBoxes(x.predictions.map(p => ({
     box: p,
-    color: x.color,
-    label: `${p.class} ${(p.confidence * 100).toFixed(0)}%`,
-    sublabel: null
+    color: p._classMapped ? x.color : UNMAPPED_COLOR,
+    label: `${p._classStandard} ${(p.confidence * 100).toFixed(0)}%`,
+    sublabel: null,
+    dashed: !p._classMapped
   })));
   renderDetectionListSimple(x.predictions, x.model.descriptions || {}, x.color);
 }
@@ -700,13 +825,18 @@ function renderConsensus() {
 
   drawImage();
   drawBoxes(groups.map(g => {
-    // Color: si los modelos coinciden, mezcla / neutro; si solo uno, su color
-    const color = g.nModels === 1 ? g.members[0]._color : "#1e3a5f";
+    // Color: sin homologar = color de aviso; consenso de varios = azul oscuro;
+    // un solo modelo = el color de ese modelo.
+    let color;
+    if (!g.mapped) color = UNMAPPED_COLOR;
+    else if (g.nModels === 1) color = g.members[0]._color;
+    else color = "#1e3a5f";
     return {
       box: g.box,
       color,
       label: `${g.box.class} ${(g.confAvg * 100).toFixed(0)}%`,
-      sublabel: `${g.nModels}× modelo${g.nModels > 1 ? "s" : ""}`
+      sublabel: `${g.nModels}× modelo${g.nModels > 1 ? "s" : ""}`,
+      dashed: !g.mapped
     };
   }));
   renderConsensusList(groups);
@@ -760,7 +890,14 @@ async function drawBoxes(items) {
     const y = it.box.y - it.box.height / 2;
     ctx.strokeStyle = it.color;
     ctx.lineWidth = lineW;
+    // Las detecciones sin homologar se dibujan con borde discontinuo
+    if (it.dashed) {
+      ctx.setLineDash([Math.max(6, lineW * 3), Math.max(4, lineW * 2)]);
+    } else {
+      ctx.setLineDash([]);
+    }
     ctx.strokeRect(x, y, it.box.width, it.box.height);
+    ctx.setLineDash([]);
 
     // Label principal
     ctx.font = `bold ${fontSize}px sans-serif`;
@@ -796,11 +933,14 @@ function renderDetectionListUnion(allPreds) {
     list.innerHTML = '<p style="color:#718096;font-style:italic;">Sin detecciones por encima del umbral.</p>';
     return;
   }
-  // Agrupar por clase normalizada
+  // Leyenda de homologación
+  list.appendChild(buildHomologLegend(allPreds));
+
+  // Agrupar por clase normalizada (homologada)
   const grouped = {};
   allPreds.forEach(p => {
     const key = p._classNorm;
-    if (!grouped[key]) grouped[key] = { classDisplay: p.class, items: [] };
+    if (!grouped[key]) grouped[key] = { classDisplay: p._classStandard, mapped: p._classMapped, items: [] };
     grouped[key].items.push(p);
   });
 
@@ -815,12 +955,11 @@ function renderDetectionListUnion(allPreds) {
       return x ? x.model : null;
     }).filter(Boolean);
 
-    // Junta descripciones de todos los modelos que detectaron la clase
-    const descSet = new Set();
-    modelNames.forEach(m => {
-      const d = (m.descriptions || {})[g.classDisplay];
-      if (d) descSet.add(d);
-    });
+    // Etiquetas originales distintas que se han homologado a esta clase
+    const originalLabels = Array.from(new Set(g.items.map(p => p._classOriginal)));
+
+    // Descripción: la de la taxonomía estándar si está homologada
+    const desc = g.mapped ? taxonomyDescription(g.classDisplay) : "";
 
     const pills = modelNames.map(m => {
       const color = getColorForModel(m.id);
@@ -828,21 +967,42 @@ function renderDetectionListUnion(allPreds) {
     }).join("");
 
     const div = document.createElement("div");
-    div.className = "detection";
+    div.className = "detection" + (g.mapped ? "" : " unmapped");
     div.innerHTML = `
       <div class="detection-row">
         <span class="detection-label">${escapeHtml(g.classDisplay)}</span>
+        ${g.mapped ? "" : `<span class="badge-unmapped">${UNMAPPED_LABEL}</span>`}
         <span class="detection-badge">${g.items.length} detección(es)</span>
         <span class="detection-badge">max ${max}%</span>
         <span class="detection-badge" style="background:#4a5568">avg ${avg}%</span>
         <span class="detection-models">${pills}</span>
       </div>
-      ${descSet.size > 0
-        ? `<div class="detection-desc">${Array.from(descSet).map(escapeHtml).join(" · ")}</div>`
-        : ""}
+      ${buildOriginalTrace(g.classDisplay, originalLabels)}
+      ${desc ? `<div class="detection-desc">${escapeHtml(desc)}</div>` : ""}
     `;
     list.appendChild(div);
   });
+}
+
+// Construye la línea de trazabilidad "homologado desde: ..." cuando
+// la etiqueta original difiere de la estándar.
+function buildOriginalTrace(standardClass, originalLabels) {
+  const distintas = originalLabels.filter(o => o !== standardClass);
+  if (distintas.length === 0) return "";
+  return `<div class="detection-original">homologado desde: ${distintas.map(o => '"' + escapeHtml(o) + '"').join(", ")}</div>`;
+}
+
+// Construye la leyenda de homologación que se muestra encima de la lista.
+function buildHomologLegend(allPreds) {
+  const hayUnmapped = allPreds.some(p => !p._classMapped);
+  const div = document.createElement("div");
+  div.className = "homolog-legend";
+  let html = `<div class="legend-item"><span class="legend-swatch" style="background:#2c5282"></span>Clase homologada a la taxonomía estándar</div>`;
+  if (hayUnmapped) {
+    html += `<div class="legend-item"><span class="legend-swatch" style="background:${UNMAPPED_COLOR}"></span>Sin homologar (clase no presente en el diccionario; borde discontinuo)</div>`;
+  }
+  div.innerHTML = html;
+  return div;
 }
 
 function renderDetectionListSimple(preds, descriptions, color) {
@@ -852,27 +1012,45 @@ function renderDetectionListSimple(preds, descriptions, color) {
     list.innerHTML = '<p style="color:#718096;font-style:italic;">Sin detecciones por encima del umbral.</p>';
     return;
   }
+  list.appendChild(buildHomologLegend(preds));
+
+  // Agrupar por clase estándar homologada
   const grouped = {};
-  preds.forEach(p => { (grouped[p.class] || (grouped[p.class] = [])).push(p.confidence); });
-  for (const cls of Object.keys(grouped)) {
-    const confs = grouped[cls];
+  preds.forEach(p => {
+    const key = p._classNorm;
+    if (!grouped[key]) grouped[key] = { classDisplay: p._classStandard, mapped: p._classMapped, items: [] };
+    grouped[key].items.push(p);
+  });
+
+  Object.keys(grouped).forEach(key => {
+    const g = grouped[key];
+    const confs = g.items.map(p => p.confidence);
     const max = (Math.max.apply(null, confs) * 100).toFixed(1);
     const avg = ((confs.reduce((a, b) => a + b, 0) / confs.length) * 100).toFixed(1);
-    const desc = descriptions[cls] || "";
+    const originalLabels = Array.from(new Set(g.items.map(p => p._classOriginal)));
+    // Descripción: prioriza la de la taxonomía estándar; si no, la del modelo
+    let desc = g.mapped ? taxonomyDescription(g.classDisplay) : "";
+    if (!desc) {
+      // fallback: descripción del modelo para alguna etiqueta original
+      for (const o of originalLabels) { if (descriptions[o]) { desc = descriptions[o]; break; } }
+    }
+    const dotColor = g.mapped ? color : UNMAPPED_COLOR;
     const div = document.createElement("div");
-    div.className = "detection";
-    div.style.borderLeftColor = color;
+    div.className = "detection" + (g.mapped ? "" : " unmapped");
+    div.style.borderLeftColor = dotColor;
     div.innerHTML = `
       <div class="detection-row">
-        <span class="detection-label">${escapeHtml(cls)}</span>
-        <span class="detection-badge">${confs.length} detección(es)</span>
-        <span class="detection-badge" style="background:${color}">max ${max}%</span>
+        <span class="detection-label">${escapeHtml(g.classDisplay)}</span>
+        ${g.mapped ? "" : `<span class="badge-unmapped">${UNMAPPED_LABEL}</span>`}
+        <span class="detection-badge">${g.items.length} detección(es)</span>
+        <span class="detection-badge" style="background:${dotColor}">max ${max}%</span>
         <span class="detection-badge" style="background:#4a5568">avg ${avg}%</span>
       </div>
+      ${buildOriginalTrace(g.classDisplay, originalLabels)}
       ${desc ? `<div class="detection-desc">${escapeHtml(desc)}</div>` : ""}
     `;
     list.appendChild(div);
-  }
+  });
 }
 
 function renderConsensusList(groups) {
@@ -882,6 +1060,10 @@ function renderConsensusList(groups) {
     list.innerHTML = '<p style="color:#718096;font-style:italic;">Sin detecciones para mostrar.</p>';
     return;
   }
+  // Leyenda de homologación (a partir de todos los miembros de todos los grupos)
+  const allMembers = groups.flatMap(g => g.members);
+  list.appendChild(buildHomologLegend(allMembers));
+
   // Orden: primero las que tienen más modelos coincidiendo, luego por confianza
   groups.sort((a, b) => (b.nModels - a.nModels) || (b.confAvg - a.confAvg));
 
@@ -892,33 +1074,29 @@ function renderConsensusList(groups) {
       return `<span class="model-pill" style="background:${x.color}" title="${escapeHtml(x.model.name)}">${escapeHtml(modelInitials(x.model.name))}</span>`;
     }).join("");
 
-    // Descripciones combinadas
-    const descSet = new Set();
-    g.modelIds.forEach(id => {
-      const x = lastResults.perModel.find(p => p.model.id === id);
-      if (!x) return;
-      const d = (x.model.descriptions || {})[g.box.class];
-      if (d) descSet.add(d);
-    });
+    // Descripción: la de la taxonomía estándar si el grupo está homologado
+    const desc = g.mapped ? taxonomyDescription(g.box.class) : "";
 
     const consensusLabel = g.nModels > 1
       ? `<span class="detection-badge" style="background:#22543d">${g.nModels}× modelos coinciden</span>`
       : `<span class="detection-badge" style="background:#a0aec0">solo 1 modelo</span>`;
 
+    const borderColor = !g.mapped ? UNMAPPED_COLOR : (g.nModels > 1 ? "#22543d" : "#a0aec0");
+
     const div = document.createElement("div");
-    div.className = "detection";
-    div.style.borderLeftColor = g.nModels > 1 ? "#22543d" : "#a0aec0";
+    div.className = "detection" + (g.mapped ? "" : " unmapped");
+    div.style.borderLeftColor = borderColor;
     div.innerHTML = `
       <div class="detection-row">
         <span class="detection-label">${escapeHtml(g.box.class)}</span>
+        ${g.mapped ? "" : `<span class="badge-unmapped">${UNMAPPED_LABEL}</span>`}
         ${consensusLabel}
         <span class="detection-badge">max ${(g.confMax * 100).toFixed(1)}%</span>
         <span class="detection-badge" style="background:#4a5568">avg ${(g.confAvg * 100).toFixed(1)}%</span>
         <span class="detection-models">${pills}</span>
       </div>
-      ${descSet.size > 0
-        ? `<div class="detection-desc">${Array.from(descSet).map(escapeHtml).join(" · ")}</div>`
-        : ""}
+      ${buildOriginalTrace(g.box.class, g.originalLabels)}
+      ${desc ? `<div class="detection-desc">${escapeHtml(desc)}</div>` : ""}
     `;
     list.appendChild(div);
   });
@@ -946,11 +1124,120 @@ function renderModelSummary() {
   });
 }
 
+// =========================================================
+// GESTIÓN DE LA UI DEL DICCIONARIO DE CLASES SINÓNIMAS
+// =========================================================
+
+// Renderiza la lista de las 6 clases de la taxonomía estándar.
+function renderTaxonomyList() {
+  const ul = $("taxonomy-list");
+  if (!ul) return;
+  ul.innerHTML = "";
+  const tax = loadTaxonomy();
+  if (!tax || !tax.taxonomy) {
+    ul.innerHTML = '<li style="font-style:italic;color:#718096;">No hay diccionario cargado.</li>';
+    return;
+  }
+  Object.keys(tax.taxonomy).forEach(cls => {
+    const syns = (tax.synonyms && tax.synonyms[cls]) || [];
+    const li = document.createElement("li");
+    li.innerHTML = `
+      <div class="tax-class">${escapeHtml(cls)}</div>
+      <div class="tax-desc">${escapeHtml(tax.taxonomy[cls])}</div>
+      <div class="tax-syns">sinónimos: ${syns.map(s => escapeHtml(s)).join(" · ")}</div>
+    `;
+    ul.appendChild(li);
+  });
+}
+
+// Vuelca el JSON del diccionario en el textarea para edición.
+function fillTaxonomyTextarea() {
+  const ta = $("taxonomy-json");
+  if (!ta) return;
+  const tax = loadTaxonomy();
+  ta.value = tax ? JSON.stringify(tax, null, 2) : "";
+}
+
+function refreshTaxonomyUI() {
+  renderTaxonomyList();
+  fillTaxonomyTextarea();
+}
+
+// Valida que un objeto tiene la forma esperada de diccionario.
+function validateTaxonomyObject(data) {
+  if (!data || typeof data !== "object") return "El JSON no es un objeto.";
+  if (!data.synonyms || typeof data.synonyms !== "object") return "Falta el objeto 'synonyms'.";
+  if (!data.taxonomy || typeof data.taxonomy !== "object") return "Falta el objeto 'taxonomy'.";
+  for (const cls of Object.keys(data.synonyms)) {
+    if (!Array.isArray(data.synonyms[cls])) return `'synonyms.${cls}' debe ser una lista.`;
+  }
+  return null; // sin error
+}
+
+function bindTaxonomyUI() {
+  const saveBtn = $("taxonomy-save-btn");
+  if (!saveBtn) return; // si el HTML no tiene la sección, no hacemos nada
+
+  // Guardar el diccionario editado en el textarea
+  saveBtn.addEventListener("click", () => {
+    let data;
+    try { data = JSON.parse($("taxonomy-json").value); }
+    catch (e) { showStatus("taxonomy-status", "JSON inválido: " + e.message, "error"); return; }
+    const err = validateTaxonomyObject(data);
+    if (err) { showStatus("taxonomy-status", "Error: " + err, "error"); return; }
+    saveTaxonomy(data);
+    refreshTaxonomyUI();
+    showStatus("taxonomy-status", "Diccionario guardado. La homologación usará estas reglas en el próximo análisis.", "success");
+  });
+
+  // Exportar el diccionario a un fichero JSON
+  $("taxonomy-export-btn").addEventListener("click", () => {
+    const tax = loadTaxonomy() || {};
+    const blob = new Blob([JSON.stringify(tax, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "taxonomy.json";
+    document.body.appendChild(a); a.click(); a.remove();
+  });
+
+  // Importar un diccionario desde un fichero JSON
+  $("taxonomy-import-file").addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      let data;
+      try { data = JSON.parse(reader.result); }
+      catch (err) { showStatus("taxonomy-status", "Error al importar: JSON inválido.", "error"); return; }
+      const verr = validateTaxonomyObject(data);
+      if (verr) { showStatus("taxonomy-status", "Error al importar: " + verr, "error"); return; }
+      saveTaxonomy(data);
+      refreshTaxonomyUI();
+      showStatus("taxonomy-status", "Diccionario importado correctamente.", "success");
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  });
+
+  // Recargar el diccionario por defecto
+  $("taxonomy-reset-btn").addEventListener("click", async () => {
+    if (!confirm("Esto descarta el diccionario actual y recarga el de por defecto. ¿Continuar?")) return;
+    localStorage.removeItem(TAXONOMY_KEY);
+    _homologIndex = null;
+    await ensureTaxonomyLoaded();
+    refreshTaxonomyUI();
+    showStatus("taxonomy-status", "Diccionario por defecto recargado.", "success");
+  });
+}
+
 // ---------- Inicialización -------------------------------
 (async function init() {
   await ensureExamplesLoaded();
+  await ensureTaxonomyLoaded();
   renderModelList();
   renderModelCheckboxes();
+  refreshTaxonomyUI();
+  bindTaxonomyUI();
   updateAnalyzeState();
   // Inicializar display del IoU
   $("iou-display").textContent = (IOU_DEFAULT).toFixed(2);

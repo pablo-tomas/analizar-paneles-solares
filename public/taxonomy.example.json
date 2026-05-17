@@ -1,0 +1,20 @@
+{
+  "taxonomyVersion": "1.0",
+  "description": "Taxonomía estándar de 6 clases para imágenes RGB de paneles solares y diccionario de clases sinónimas para homologar las clases de cualquier modelo.",
+  "taxonomy": {
+    "Snow": "Nieve. Programar limpieza.",
+    "Dust": "Suciedad acumulada sobre el panel. Programar limpieza.",
+    "Bird Drop": "Excremento de ave. Programar limpieza.",
+    "Physical Damage": "Fisura visible. Riesgo de degradación acelerada.",
+    "Defective": "Algún tipo de defecto. Programar siguiente revisión presencial.",
+    "Non Defective": "Panel sano. Programar siguiente revisión con IA."
+  },
+  "synonyms": {
+    "Snow": ["Snow", "Nieve"],
+    "Dust": ["Dust", "Dusty", "Dirty", "Soiling"],
+    "Bird Drop": ["Bird Drop", "Bird_Drop", "Bird drop", "Bird_drop"],
+    "Physical Damage": ["Physical Damage", "Physical_Damage", "Physical damage", "Physical_damage", "Cracked"],
+    "Defective": ["Defective"],
+    "Non Defective": ["Non Defective", "Non_Defective", "Non defective", "Non_defective", "Panel"]
+  }
+}

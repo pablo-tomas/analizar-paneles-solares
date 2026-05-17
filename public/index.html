@@ -101,6 +101,27 @@
       </div>
     </section>
 
+    <section id="taxonomy-section">
+      <h2>Taxonomía y Diccionario de Clases Sinónimas</h2>
+      <p class="help">La taxonomía estándar tiene 6 clases. El Diccionario de Clases Sinónimas indica qué nombres de clase de cada modelo se homologan a cada clase estándar. La homologación es insensible a mayúsculas, espacios y guiones. Las detecciones cuya clase no figure en el diccionario se conservan y se marcan como "sin homologar".</p>
+
+      <h3>Taxonomía estándar (6 clases)</h3>
+      <ul id="taxonomy-list"></ul>
+
+      <h3 style="margin-top:1rem">Diccionario de Clases Sinónimas</h3>
+      <p class="help">Edita el JSON para añadir o quitar sinónimos. Cada clave es una clase de la taxonomía; cada valor es la lista de nombres de clase equivalentes.</p>
+      <textarea id="taxonomy-json" spellcheck="false"></textarea>
+
+      <div class="row-buttons">
+        <button id="taxonomy-save-btn">Guardar diccionario</button>
+        <button id="taxonomy-export-btn" class="btn-secondary">⬇ Exportar JSON</button>
+        <label for="taxonomy-import-file" class="btn-like btn-secondary">⬆ Importar JSON</label>
+        <input type="file" id="taxonomy-import-file" accept="application/json,.json" style="display:none" />
+        <button id="taxonomy-reset-btn" class="btn-secondary">↺ Recargar diccionario por defecto</button>
+      </div>
+      <div id="taxonomy-status"></div>
+    </section>
+
     <section id="form-section">
       <h2 id="form-title">Añadir un nuevo modelo</h2>
 
