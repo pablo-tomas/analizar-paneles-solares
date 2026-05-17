@@ -23,6 +23,7 @@ Aplicación web con **frontend** (HTML/CSS/JS) y **backend serverless** (Node.js
 | Consenso entre modelos | — | **Cálculo IoU con umbral configurable** |
 | Aviso de coste | — | **Advierte al seleccionar varios modelos** |
 | Resumen por modelo | — | **Estado, nº detecciones, errores específicos** |
+| Estandarización de clases | — | **Diccionario de Clases Sinónimas: homologa las clases de cada modelo a una taxonomía estándar de 6 clases** |
 
 ---
 
@@ -37,11 +38,12 @@ Todas las detecciones de todos los modelos, dibujadas con el color de cada model
 Sub-pestañas, una por modelo. Permite ver solo las detecciones de un modelo concreto, útil para depurar o comparar visualmente.
 
 ### Consenso
-Las detecciones se agrupan por **solapamiento (IoU ≥ umbral configurable)** y **misma clase**. Cada grupo se muestra como una sola caja:
+Las detecciones se agrupan por **solapamiento (IoU ≥ umbral configurable)** y **misma clase homologada**. Cada grupo se muestra como una sola caja:
 - Si **varios modelos** detectaron lo mismo en la misma zona → caja en color oscuro con etiqueta "N× modelos coinciden". **Alta confianza.**
 - Si **solo un modelo** detectó algo → caja en color gris, etiqueta "solo 1 modelo". **Confianza menor.**
+- Si la clase **no está en el diccionario** → caja con borde discontinuo y color de aviso, etiqueta "Sin homologar".
 
-**Nota sobre la reconciliación de clases**: la normalización es deliberadamente conservadora (solo lowercase + trim). No fuerza que `"Dust"` y `"Soiling"` sean equivalentes aunque semánticamente lo sean. Esa reconciliación profunda es trabajo del LLM (Sprint 3).
+**Estandarización de clases (Diccionario de Clases Sinónimas)**: cada modelo puede nombrar sus clases de forma distinta (`Dust`, `Dirty`, `Soiling`, `Dusty`...). La herramienta homologa todas esas variantes a una taxonomía estándar de 6 clases antes de agrupar por consenso. Así, una detección `Dirty` de un modelo y una `Dust` de otro, si solapan espacialmente, se consolidan en un único hallazgo `Dust`. La homologación es insensible a mayúsculas, espacios y guiones. Las clases no presentes en el diccionario se conservan y se marcan visualmente como "sin homologar" — nunca se descartan.
 
 ---
 
@@ -53,10 +55,11 @@ analizar-paneles-solares/
 │   ├── infer.js              ← Función serverless (proxy → Roboflow) - SIN CAMBIOS
 │   └── health.js             ← Endpoint de diagnóstico - SIN CAMBIOS
 ├── public/
-│   ├── index.html            ← Multi-selección, modos de visualización, slider IoU
-│   ├── styles.css            ← Estilos nuevos: checkboxes, sub-pestañas, pills
-│   ├── app.js                ← Orquestación paralela, cálculo IoU, modos
-│   └── models.example.json
+│   ├── index.html            ← Multi-selección, modos, slider IoU, gestión de taxonomía
+│   ├── styles.css            ← Estilos: checkboxes, sub-pestañas, pills, homologación
+│   ├── app.js                ← Orquestación paralela, IoU, modos, homologación de clases
+│   ├── models.example.json   ← Modelos de ejemplo
+│   └── taxonomy.example.json ← Diccionario de Clases Sinónimas por defecto (NUEVO)
 ├── package.json
 ├── vercel.json
 ├── .env.local.example
@@ -64,17 +67,41 @@ analizar-paneles-solares/
 └── README.md
 ```
 
-El backend **no ha cambiado** respecto a v2. Toda la lógica de orquestación vive en el navegador.
+El backend **no ha cambiado** respecto a v2. Toda la lógica de orquestación y homologación vive en el navegador.
 
 ---
 
 ## Despliegue
 
-Si vienes de la v2, basta con **reemplazar los archivos del frontend** (`public/index.html`, `public/styles.css`, `public/app.js`) y el `package.json`. La variable de entorno `ROBOFLOW_API_KEY` ya configurada en Vercel sigue siendo válida.
+Si vienes de una v3 anterior, **reemplaza los archivos del frontend** (`public/index.html`, `public/styles.css`, `public/app.js`) y **añade el nuevo** `public/taxonomy.example.json`. La variable de entorno `ROBOFLOW_API_KEY` ya configurada en Vercel sigue siendo válida.
 
 Vercel detectará el push y redesplegará en 1-2 minutos.
 
 Para un despliegue desde cero, sigue las instrucciones de la v2 (subir a un repo nuevo de GitHub, conectar con Vercel, añadir la variable de entorno `ROBOFLOW_API_KEY`).
+
+---
+
+## El Diccionario de Clases Sinónimas
+
+La herramienta mantiene una **taxonomía estándar de 6 clases** para imágenes RGB:
+
+| Clase estándar | Significado / acción |
+|---|---|
+| `Snow` | Nieve. Programar limpieza. |
+| `Dust` | Suciedad acumulada sobre el panel. Programar limpieza. |
+| `Bird Drop` | Excremento de ave. Programar limpieza. |
+| `Physical Damage` | Fisura visible. Riesgo de degradación acelerada. |
+| `Defective` | Algún tipo de defecto. Programar siguiente revisión presencial. |
+| `Non Defective` | Panel sano. Programar siguiente revisión con IA. |
+
+Cada modelo nombra sus clases a su manera. El **Diccionario de Clases Sinónimas** (un JSON editable en la pestaña *Configurar*) indica qué nombres equivalen a cada clase estándar. Ejemplo: `Dust`, `Dusty`, `Dirty` y `Soiling` se homologan todos a `Dust`; `Cracked` se homologa a `Physical Damage`; `Panel` a `Non Defective`.
+
+- La homologación es **insensible a mayúsculas, espacios y guiones** (bajos o medios): no hace falta enumerar `Physical_Damage`, `Physical-Damage` y `Physical Damage` por separado.
+- El diccionario se gestiona como los modelos: persistencia en `localStorage`, export/import a `taxonomy.json` y opción de recargar el de por defecto.
+- Las clases **no presentes** en el diccionario **se conservan y se muestran** con borde discontinuo y la etiqueta "Sin homologar". Nunca se descartan: ocultar un defecto real sería peligroso.
+- En las listas de detecciones, cuando la etiqueta original difiere de la estándar, se muestra una línea de trazabilidad `homologado desde: "..."`.
+
+El consenso agrupa por la **clase homologada**, de modo que detecciones con nombres distintos pero sinónimos (`Dust` de un modelo, `Dirty` de otro) que solapen espacialmente se consolidan en un único hallazgo.
 
 ---
 
@@ -83,6 +110,7 @@ Para un despliegue desde cero, sigue las instrucciones de la v2 (subir a un repo
 - **Misma clave de localStorage** (`rf_models_v2`) → los modelos guardados en la v2 funcionan sin migración.
 - **Mismo formato `models.json`** → los archivos exportados con la v2 se pueden importar en la v3 directamente.
 - **Mismo endpoint `/api/infer`** → si tienes el repo de la v2 ya desplegado, no toca tocar nada del backend.
+- El Diccionario de Clases Sinónimas se carga automáticamente la primera vez desde `taxonomy.example.json`; no requiere ninguna acción del usuario.
 
 ---
 
